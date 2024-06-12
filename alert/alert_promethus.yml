@@ -1,0 +1,27 @@
+groups:
+- name: prometheus
+  rules:
+  - alert: PrometheusJobMissing
+    expr: absent(up{job="prometheus"})
+    for: 0m
+    labels:
+      severity: warning
+    annotations:
+      summary: Prometheus Job缺失 (主机 {{ $labels.instance }})
+      description: "Prometheus Job缺失\n其他信息: \n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  - alert: PrometheusTargetMissing
+    expr: up == 0
+    for: 0m
+    labels:
+      severity: critical
+    annotations:
+      summary: Prometheus Target缺失 (主机 {{ $labels.instance }})
+      description: "Prometheus Target缺失\n其他信息: \n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  - alert: PrometheusTooManyRestarts
+    expr: changes(process_start_time_seconds{job=~"prometheus|pushgateway|alertmanager"}[15m]) > 2
+    for: 0m
+    labels:
+      severity: warning
+    annotations:
+      summary: Prometheus 重启次数过多 (主机 {{ $labels.instance }})
+      description: "Prometheus 重启次数过多，在过去 15 分钟内重启了两次以上\n其他信息: \n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"

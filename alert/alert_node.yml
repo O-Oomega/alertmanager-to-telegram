@@ -1,0 +1,152 @@
+groups:
+- name: node
+  rules:
+  - alert: HostOutOfMemory
+    expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100 < 10) * on(instance) group_left (nodename) node_uname_info{nodename=~".+"}
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: 主机内存不足 (主机：{{ $labels.instance }})
+      description: "节点内存已满(剩余 < 10%)\n其他信息: \n  VALUE = {{ $value }}\n  Labels = {{ $labels }}"
+    # You may want to increase the alert manager 'repeat_interval' for this type of alert to daily or weekly
+  - alert: HostMemoryIsUnderutilized
+    expr: (100 - (avg_over_time(node_memory_MemAvailable_bytes[30m]) / node_memory_MemTotal_bytes * 100) < 20) * on(instance) group_left (nodename) node_uname_info{nodename=~".+"}
+    for: 1w
+    labels:
+      severity: info
+    annotations:
+      summary: 主机内存利用率不足 (主机：{{ $labels.instance }})
+      description: "节点内存使用 < 20% 已持续一周。请考虑减小内存 (主机：{{ $labels.instance }})\n其他信息:\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  - alert: HostUnusualNetworkThroughputIn
+    expr: (sum by (instance) (rate(node_network_receive_bytes_total[2m])) / 1024 / 1024 > 100) * on(instance) group_left (nodename) node_uname_info{nodename=~".+"}
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: 主机网络吞吐量异常(接收量异常) (主机 {{ $labels.instance }})
+      description: "主机网络接口可能接收了太多数据（> 100 MB/s）\n其他信息:\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  - alert: HostUnusualNetworkThroughputOut
+    expr: (sum by (instance) (rate(node_network_transmit_bytes_total[2m])) / 1024 / 1024 > 100) * on(instance) group_left (nodename) node_uname_info{nodename=~".+"}
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: 主机网络吞吐量异常(发送量异常) (主机 {{ $labels.instance }})
+      description: "主机网络接口可能发送了太多数据 (> 100 MB/s)\n其他信息:\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  - alert: HostUnusualDiskReadRate
+    expr: (sum by (instance) (rate(node_disk_read_bytes_total[2m])) / 1024 / 1024 > 50) * on(instance) group_left (nodename) node_uname_info{nodename=~".+"}
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: 主机磁盘读取率异常 (主机 {{ $labels.instance }})
+      description: "磁盘可能读取了太多数据 (> 50 MB/s)\n其他信息:\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  - alert: HostUnusualDiskWriteRate
+    expr: (sum by (instance) (rate(node_disk_written_bytes_total[2m])) / 1024 / 1024 > 50) * on(instance) group_left (nodename) node_uname_info{nodename=~".+"}
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: 主机磁盘写入速率异常 (主机 {{ $labels.instance }})
+      description: "磁盘可能写入了太多数据 (> 50 MB/s)\n其他信息\n    VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  - alert: HostOutOfDiskSpace
+    # Please add ignored mountpoints in node_exporter parameters like
+    # "--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|run)($|/)".
+    # 该注释建议你在启动 node_exporter 时，添加一个参数来忽略某些挂载点。
+    # --collector.filesystem.ignored-mount-points=^/(sys|proc|dev|run)($|/) 是一个正则表达式，匹配并忽略挂载点 /sys、/proc、/dev 和 /run 以及它们的子目录。
+    # 这些挂载点通常包含临时文件系统 (如 tmpfs)、伪文件系统 (如 proc 和 sysfs)，它们的数据对磁盘空间监控没有太大意义，因而可以忽略。
+    # Same rule using "node_filesystem_free_bytes" will fire when disk fills for non-root users.
+    # 这部分提醒你，使用 node_filesystem_free_bytes 规则监控磁盘空间时，告警会在磁盘几乎填满时触发，即使是非 root 用户。
+    # 原因是非 root 用户可能没有权限访问某些系统目录，因此需要对这些用户单独考虑磁盘空间的使用情况。
+    expr: ((node_filesystem_avail_bytes * 100) / node_filesystem_size_bytes < 10 and ON (instance, device, mountpoint) node_filesystem_readonly == 0) * on(instance) group_left (nodename) node_uname_info{nodename=~".+"}
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: 主机磁盘空间不足 (主机 {{ $labels.instance }})
+      description: "磁盘几乎已满(剩余空间不足 10%)\n其他信息\n    VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  - alert: HostDiskWillFillIn24Hours
+    expr: ((node_filesystem_avail_bytes * 100) / node_filesystem_size_bytes < 10 and ON (instance, device, mountpoint) predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs"}[1h], 24 * 3600) < 0 and ON (instance, device, mountpoint) node_filesystem_readonly == 0) * on(instance) group_left (nodename) node_uname_info{nodename=~".+"}
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: 主机磁盘将在24小时内填满 (主机 {{ $labels.instance }})
+      description: "按照目前的写入速率，预计文件系统将在未来 24 小时内耗尽空间\n其他信息\n    VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  - alert: HostOutOfInodes
+    expr: (node_filesystem_files_free{fstype!="msdosfs"} / node_filesystem_files{fstype!="msdosfs"} * 100 < 10 and ON (instance, device, mountpoint) node_filesystem_readonly == 0) * on(instance) group_left (nodename) node_uname_info{nodename=~".+"}
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: 主机的 inode 不足 (主机 {{ $labels.instance }})
+      description: "磁盘可用的 inode 即将用完(剩余 < 10%)\n其他信息\n    VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  - alert: HostInodesWillFillIn24Hours
+    expr: (node_filesystem_files_free{fstype!="msdosfs"} / node_filesystem_files{fstype!="msdosfs"} * 100 < 10 and predict_linear(node_filesystem_files_free{fstype!="msdosfs"}[1h], 24 * 3600) < 0 and ON (instance, device, mountpoint) node_filesystem_readonly{fstype!="msdosfs"} == 0) * on(instance) group_left (nodename) node_uname_info{nodename=~".+"}
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: 主机 inode 将在 24 小时内填满 (主机 {{ $labels.instance }})
+      description: "按照目前的写入速率，预计文件系统将在未来 24 小时内耗尽 inode\n其他信息\n    VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  - alert: HostUnusualDiskReadLatency
+    expr: (rate(node_disk_read_time_seconds_total[1m]) / rate(node_disk_reads_completed_total[1m]) > 0.1 and rate(node_disk_reads_completed_total[1m]) > 0) * on(instance) group_left (nodename) node_uname_info{nodename=~".+"}
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: 主机异常的磁盘读取延迟 (主机 {{ $labels.instance }})
+      description: "磁盘延迟不断增加（读取操作 > 100 毫秒）\n其他信息\n    VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  - alert: HostUnusualDiskWriteLatency
+    expr: (rate(node_disk_write_time_seconds_total[1m]) / rate(node_disk_writes_completed_total[1m]) > 0.1 and rate(node_disk_writes_completed_total[1m]) > 0) * on(instance) group_left (nodename) node_uname_info{nodename=~".+"}
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: 主机异常磁盘写入延迟 (主机 {{ $labels.instance }})
+      description: "磁盘延迟不断增加 (写入操作 > 100ms)\n其他信息\n    VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  - alert: HostHighCpuLoad
+    expr: (sum by (instance) (avg by (mode, instance) (rate(node_cpu_seconds_total{mode!="idle"}[2m]))) > 0.8) * on(instance) group_left (nodename) node_uname_info{nodename=~".+"}
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: 主机 CPU 负载过高 (主机 {{ $labels.instance }})
+      description: "CPU 负载 > 80%\n其他信息\n    VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  - alert: HostCpuIsUnderutilized
+    # You may want to increase the alert manager 'repeat_interval' for this type of alert to daily or weekly
+    expr: (100 - (rate(node_cpu_seconds_total{mode="idle"}[30m]) * 100) < 20) * on(instance) group_left (nodename) node_uname_info{nodename=~".+"}
+    for: 1w
+    labels:
+      severity: info
+    annotations:
+      summary: 主机 CPU 利用率不足 (主机 {{ $labels.instance }})
+      description: "CPU 负载持续 1 周小于 20%。请考虑减少 CPU 数量。\n其他信息\n    VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  - alert: HostCpuHighIowait
+    expr: (avg by (instance) (rate(node_cpu_seconds_total{mode="iowait"}[5m])) * 100 > 10) * on(instance) group_left (nodename) node_uname_info{nodename=~".+"}
+    for: 0m
+    labels:
+      severity: warning
+    annotations:
+      summary: 主机 CPU 高 iowait (主机 {{ $labels.instance }})
+      description: "CPU iowait > 10%。iowait 较高意味着磁盘或网络受限。\n其他信息\n    VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  - alert: HostSwapIsFillingUp
+    expr: ((1 - (node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)) * 100 > 80) * on(instance) group_left (nodename) node_uname_info{nodename=~".+"}
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: 主机swap分区已满 (主机 {{ $labels.instance }})
+      description: "swap分区已填满  (>80%)\n其他信息\n    VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+  - alert: HostSystemdServiceCrashed
+    expr: (node_systemd_unit_state{state="failed"} == 1) * on(instance) group_left (nodename) node_uname_info{nodename=~".+"}
+    for: 0m
+    labels:
+      severity: warning
+    annotations:
+      summary: 主机 systemd 服务崩溃 (主机 {{ $labels.instance }})
+      description: "systemd 服务崩溃\n其他信息\n    VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
+
+
+

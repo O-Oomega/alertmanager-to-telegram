@@ -1,0 +1,11 @@
+groups:
+- name: test
+  rules:
+  - alert: TestForBot
+    expr: vector(1)
+    for: 0m
+    labels:
+      severity: info
+    annotations:
+      summary: 正在测试告警机器人 (主机 {{ $labels.instance }})
+      description: "告警机器人目前正常工作\n其他信息: \n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
