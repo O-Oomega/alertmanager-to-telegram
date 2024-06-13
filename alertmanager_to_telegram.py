@@ -35,7 +35,7 @@ def webhook():
     
         alerts = data.get('alerts', [])
         for alert in alerts:
-            # status = alert.get('status', 'unknown')
+            status = alert.get('status', 'unknown')
             labels = alert.get('labels', {})
             annotations = alert.get('annotations', {})
             # alertname = labels.get('alertname', 'unknown')
@@ -86,3 +86,10 @@ receivers:
     webhook_configs:
       - url: 'http://your_server_ip:5001/webhook'
 """
+
+
+sudo docker stop prometheus_bot
+sudo docker rm prometheus_bot
+# 脚本内容复制过去
+sudo docker build -t prometheus_bot:3.0 .
+sudo docker run -d -p 5001:5001 --name prometheus_bot prometheus_bot:3.0
