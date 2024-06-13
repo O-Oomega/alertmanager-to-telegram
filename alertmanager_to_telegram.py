@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 import requests
+import re
 
 app = Flask(__name__)
 
@@ -7,6 +8,14 @@ app = Flask(__name__)
 
 TELEGRAM_BOT_TOKEN = '6862082937:AAEIl6FdVpzKRKNuhfE-hYv2BtuQwt7i8xc'
 TELEGRAM_CHAT_ID = '-4225521223'
+
+def extract_nodename(text):
+    # 使用正则表达式匹配 "nodename:" 后面跟着任意非空白字符的部分
+    match = re.search(r'nodename:([^\s]+)', text)
+    if match:
+        return match.group(1)
+    else:
+        return None
 
 def send_message_to_telegram(text):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -33,7 +42,8 @@ def webhook():
             instance = labels.get('instance', 'unknown')
             summary = annotations.get('summary', '-')
             description = annotations.get('description', 'No description')
-            nodename = description.get('nodename', '-')
+            nodename = extract_nodename(description)
+
             if status == 'firing':
                 message = f"*告警:* {summary}\n*主机:* {nodename}\n*描述:* {description}"
             elif status == 'resolved':
