@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+import time
 import requests
 import re
 
@@ -6,12 +7,13 @@ app = Flask(__name__)
 
 # 配置 Telegram 相关参数
 
-TELEGRAM_BOT_TOKEN = '6862082937:AAEIl6FdVpzKRKNuhfE-hYv2BtuQwt7i8xc'
-TELEGRAM_CHAT_ID = '-4225521223'
+TELEGRAM_BOT_TOKEN = 'your token'
+TELEGRAM_CHAT_ID = 'your chat id'
 
 def extract_nodename(text):
-    # 使用正则表达式匹配 "nodename:" 后面跟着任意非空白字符的部分
-    match = re.search(r'nodename:([^\s]+)', text)
+    # ***nodename的提取和使用可自行修改***
+    # 使用正则表达式匹配description中的 "nodename:" 后面跟着任意非空白字符的部分
+    match = re.search(r'nodename:([^\s\]]+)', text)
     if match:
         return match.group(1)
     else:
@@ -42,6 +44,8 @@ def webhook():
             instance = labels.get('instance', 'unknown')
             summary = annotations.get('summary', '-')
             description = annotations.get('description', 'No description')
+
+            # ***nodename的提取和使用可自行修改***
             nodename = extract_nodename(description)
 
             if status == 'firing':
@@ -52,22 +56,12 @@ def webhook():
             send_message_to_telegram(message)
     
         return jsonify({'status': 'success'})
-    except RetryAfter:
-        sleep(30)
-        send_message_to_telegram(message)
-        return jsonify({'status': 'success'})
-    except TimedOut as e:
-        sleep(60)
-        bot.sendMessage(chat_id=chatID, text=message)
-        return jsonify({'status': 'success'})
-    except NetworkError as e:
-        sleep(60)
-        bot.sendMessage(chat_id=chatID, text=message)
-        return jsonify({'status': 'success'})
-    except Exception as error:       
-        bot.sendMessage(chat_id=chatID, text="Error: "+str(error))
+    except Exception as error:
         app.logger.info("\t%s",error)
-        return jsonify({'status': 'fail'})
+        print(f"\t{error}\n")
+        # requests库在连接失败时会进行多次重试，超过一定次数后才会抛出错误
+        # 因此此处不写重新连接的功能
+        return jsonify({'status': 'fail', 'reason': f"error: {error}"})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001)
@@ -78,6 +72,7 @@ if __name__ == '__main__':
 1.0 初始版本
 2.0 解决了summary的展示问题
 3.0 新增恢复告警，将主机信息从IP转为节点名
+4.0 删除多余的运行错误处理
 
 alertmanager.yml配置如下
 
@@ -88,8 +83,3 @@ receivers:
 """
 
 
-sudo docker stop prometheus_bot
-sudo docker rm prometheus_bot
-# 脚本内容复制过去
-sudo docker build -t prometheus_bot:3.0 .
-sudo docker run -d -p 5001:5001 --name prometheus_bot prometheus_bot:3.0
