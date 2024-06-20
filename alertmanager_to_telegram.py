@@ -76,10 +76,31 @@ if __name__ == '__main__':
 
 alertmanager.yml配置如下
 
+route:
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 30s
+  repeat_interval: 30m
+  receiver: 'telegram-webhook'
+  routes:
+    - match_re:
+        severity: critical|warning|info
+        continue: true
 receivers:
   - name: 'telegram-webhook'
     webhook_configs:
-      - url: 'http://your_server_ip:5001/webhook'
+      - url: 'http://localhost:5001/webhook'
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'dev', 'instance']
+  - source_match:
+      severity: 'warning'
+    target_match:
+      severity: 'info'
+    equal: ['alertname', 'dev', 'instance']
 """
 
 
